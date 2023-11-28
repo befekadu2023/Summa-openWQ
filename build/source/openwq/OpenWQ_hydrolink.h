@@ -111,6 +111,8 @@ class CLASSWQ_openwq
 
     int openwq_run_time_end(
         int simtime_summa[]);
-
+        
+    int get_numHRU();
+        
 };
 #endif
