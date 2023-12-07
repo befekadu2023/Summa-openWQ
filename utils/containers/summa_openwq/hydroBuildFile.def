@@ -1,0 +1,41 @@
+Bootstrap: docker
+From: ubuntu:20.04
+%post
+    # Update ubuntu's apt list
+    apt-get -y update && apt-get upgrade -y
+
+    export DEBIAN_FRONTEND="noninteractive" 
+    
+    # Install development tools
+    apt-get -y install g++ \
+                    gdb \
+                    gdbserver \
+                    valgrind \
+                    cmake \
+                    hdf5-tools \
+                    vim \
+                    git \
+                    wget \
+                    software-properties-common \
+                    gfortran \
+                    libnetcdf-dev \
+                    libnetcdff-dev \
+                    liblapack-dev \
+                    liblapack-dev \
+                    libblas-dev \
+                    libopenblas-dev \
+                    libboost-all-dev
+
+    # Install Armadillo
+    cd /opt
+    wget http://sourceforge.net/projects/arma/files/armadillo-10.3.0.tar.xz
+    apt install xz-utils
+    tar -xf armadillo-10.3.0.tar.xz
+    # Compile Armadillo
+    cd /opt/armadillo-10.3.0
+    cmake . -D DETECT_HDF5=true -DCMAKE_C_FLAGS="-DH5_USE_110_API"
+    make install
+    # Enable Armadillo HDF5 support
+    sed -i '121s/^\/\/ #define ARMA_USE_HDF5/#define ARMA_USE_HDF5/' /usr/include/armadillo_bits/config.hpp
+
+

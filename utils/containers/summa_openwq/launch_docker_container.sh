@@ -1,6 +1,9 @@
 #! /bin/bash
+# Set path to the top of Summa-OpenWQ with PROJECT_DIR
+# Add the sytnethic tests directory if desired
+export PROJECT_DIR=$(realpath $(pwd)/../../../)
+# export SYNTHETIC_TESTS=
 
-export PROJECT_DIR=/Users/kyleklenk/SUMMA-Projects/Summa-openWQ
-
-docker run -d -it --name SUMMA-openWQ --mount type=bind,source=${PROJECT_DIR},target=/code/Summa-OpenWQ \
+docker run -d -it --name SUMMA-openWQ \
+    -v $PROJECT_DIR:/code/Summa-OpenWQ \
     summa-openwq:latest
