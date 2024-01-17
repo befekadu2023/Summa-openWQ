@@ -1,4 +1,45 @@
-# Structure for Unifying Multiple Modeling Alternatives: SUMMA
+# Summa-openWQ
+
+This is a development version of SUMMA that is currently coupled to work 
+with the openWQ model. See below for more information on SUMMA.
+
+
+## Installation
+
+1. Clone Summa-OpenWQ: 
+    `git clone -b develop https://github.com/ue-hydro/Summa-openWQ.git`
+2. Navigate to the openWQ directory: `cd Summa-openWQ/build/source/openwq/`
+2. Clone OpenWQ into Summa's openWQ director: 
+    `git clone -b develop https://github.com/ue-hydro/openwq.git`
+3. Go to the instructions below for your target system. Local typically uses Docker, while HPC uses Singularity.
+
+### Local
+TODO: Add Instructions for local installation
+
+### HPC
+1. Compile the Singularity image: `sudo singularity build openwq.sif utils/containers/summa_openwq/Apptainerfile.def`
+   * NOTE: Most HPC systems do not allow sudo, so you will need to build the image on a system where you have sudo access and then copy the image to the HPC system.
+2. Once you have a singularity image, load the singularity module: `module load singularity`
+3. Compile openWQ with the container: 
+   * Modify the `compile_openwq_apptainer.sh` script to point to the correct singularity image
+     and the correct path to the Summa-openWQ directory.
+   * `./build/compile_openwq_apptainer.sh`
+4. There should now be an openWQ binary in `build/source/openwq/openwq/bin`
+   * To change this directory, modify the `call_cmake.sh` script by
+     adding `-DEXEC_DIR=<target_dir>` to the cmake command.
+   * Note: the `target_dir` must be relative to the container ie. it must start with `/code/Summa-openWQ`
+
+
+## Running
+
+### HPC
+1. There is an example submission script for how to submit Summa-OpenWQ jobs to HPC systems using apptainer in `utils/hpc_submission/submission_script.sh`.
+2. The file serves as a base and can be modified to submit array jobs, etc.
+3. Each variable in the submission script is explained with comments.
+
+
+
+## Structure for Unifying Multiple Modeling Alternatives: SUMMA
 
 [![Build Status](https://travis-ci.org/NCAR/summa.svg?branch=develop)](https://travis-ci.org/NCAR/summa)
 [![GitHub license](https://img.shields.io/badge/license-GPLv3-blue.svg)](https://raw.githubusercontent.com/NCAR/SUMMA/master/COPYING)
