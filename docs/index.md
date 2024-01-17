@@ -20,11 +20,12 @@ TODO: Add Instructions for local installation
 1. Compile the Singularity image: `sudo singularity build openwq.sif utils/containers/summa_openwq/Apptainerfile.def`
    * NOTE: Most HPC systems do not allow sudo, so you will need to build the image on a system where you have sudo access and then copy the image to the HPC system.
 2. Once you have a singularity image, load the singularity module: `module load singularity`
-3. Compile openWQ with the container: 
+3. `cd ../../../`
+4. Compile openWQ with the container: 
    * Modify the `compile_openwq_apptainer.sh` script to point to the correct singularity image
      and the correct path to the Summa-openWQ directory.
    * `./build/compile_openwq_apptainer.sh`
-4. There should now be an openWQ binary in `build/source/openwq/openwq/bin`
+5. There should now be an openWQ binary in `build/source/openwq/openwq/bin`
    * To change this directory, modify the `call_cmake.sh` script by
      adding `-DEXEC_DIR=<target_dir>` to the cmake command.
    * Note: the `target_dir` must be relative to the container ie. it must start with `/code/Summa-openWQ`
