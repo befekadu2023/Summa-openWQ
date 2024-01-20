@@ -13,14 +13,13 @@ module summa_openwq
 
   ! Global Data for prognostic Variables of HRUs
   type(gru_hru_doubleVec),save,public   :: progStruct_timestep_start ! copy of progStruct at the start of timestep for passing fluxes
+  type(CLASSWQ_openwq),save,public      :: openwq_obj
+  
 
   contains
 
-  ! Subroutine to initalize the openWQ object
-  ! putting it here to keep the SUMMA_Driver clean
+! Initialize the openWQ object
 subroutine openwq_init(err, message)
-
-  USE globalData,only:openwq_obj
   USE globalData,only:gru_struc                               ! gru-hru mapping structures
   USE globalData,only:prog_meta
   USE allocspace_progStuct_module,only:allocGlobal_porgStruct ! module to allocate space for global data structures
@@ -345,7 +344,6 @@ subroutine openwq_run_space_step(  &
   USE var_lookup,   only: iLookATTR  ! named variables for real valued attribute data structure
   USE var_lookup,   only: iLookINDEX 
   USE summa_type,   only: summa1_type_dec            ! master summa data type
-  USE globalData,   only: openwq_obj
   USE data_types,   only: var_dlength,var_i
   USE globalData,   only: gru_struc
   USE globalData,   only: data_step   ! time step of forcing data (s)

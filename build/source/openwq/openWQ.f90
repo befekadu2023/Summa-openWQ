@@ -64,8 +64,8 @@ module openwq
          nAquifer_2openwq,          & ! num layers of aquifer (fixed to 1)
          nYdirec_2openwq)                 ! num of layers in y-dir (set to 1 because not used in summa)
 
-    end function
-!  ! Globaly accessible variable
+   end function
+
 
    integer function openwq_run_time_start(   &
       this,                                  &
@@ -112,7 +112,7 @@ module openwq
          soilWatVol_stateVar_summa_m3,          &
          aquiferWatVol_stateVar_summa_m3)
    
-      end function
+   end function
 
    integer function openwq_run_space(  &
       this,                            &

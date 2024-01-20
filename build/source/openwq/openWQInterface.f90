@@ -1,3 +1,9 @@
+! OpenWQ C Interface
+! This file contains the Fortran functions that are callable from C.
+! These function are mapped to the C functions in defined in OpenWQ_interface.h
+! and implmeneted in OpenWQ_interface.c
+
+
 interface
     function create_openwq_c() bind(C, name="create_openwq")
 
