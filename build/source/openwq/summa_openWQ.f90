@@ -79,10 +79,7 @@ end subroutine openwq_init
   
 ! Subroutine that SUMMA calls to pass varialbes that need to go to
 ! openWQ - the copy of progStruct is done in here
-subroutine openwq_run_time_start(  &
-    openwq_obj,             & ! passing openwq object
-    summa1_struc)
-
+subroutine openwq_run_time_start(summa1_struc)
   USE summa_type, only: summa1_type_dec            ! master summa data type
   USE globalData, only: gru_struc
 
