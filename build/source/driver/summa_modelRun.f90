@@ -32,9 +32,6 @@ USE var_lookup,only:iLookDIAG        ! look-up values for local column model dia
 USE var_lookup,only:iLookINDEX       ! look-up values for local column index variables
 USE summa_util,only:handle_err
 
-! OpenWQ
-USE summa_openwq,only:openwq_run_space_step
-
 ! safety: set private unless specified otherwise
 implicit none
 private
@@ -275,20 +272,6 @@ contains
   !$omp end critical(saveTiming)
 
  end do  ! (looping through GRUs)
-
- ! ************************************************************************************************************
- ! OpenWQ
- ! ************************************************************************************************************
- 
- call openwq_run_space_step(&
-    timeStruct,                         &
-    summa1_struc,                       &  
-    fluxStruct,                         & 
-    nGRU) 
- 
- ! ************************************************************************************************************
- ! OpenWQ
- ! ************************************************************************************************************
 
  !$omp end do
  end associate summaVars2

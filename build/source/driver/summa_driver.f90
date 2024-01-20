@@ -42,13 +42,11 @@ USE globalData, only: numtim                                ! number of model ti
 USE var_lookup, only: iLookTIME  ! named variables for time data structure
 USE var_lookup, only: iLookPROG  ! named variables for state variables
 
-USE globalData,only:gru_struc                               ! gru-hru mapping structures
-
 
 ! OpenWQ coupling 
-USE summa_openwq,only:openwq_obj
 USE summa_openwq,only:openwq_init
 USE summa_openwq,only:openwq_run_time_start
+USE summa_openwq,only:openwq_run_space_step
 USE summa_openwq,only:openwq_run_time_end
 
 USE, intrinsic :: iso_c_binding
@@ -106,21 +104,20 @@ do modelTimeStep=1,numtim
  call handle_err(err, message)
 
  ! *** OPENWQ openwq_run_time_start ***
- call openwq_run_time_start(openwq_obj, summa1_struc(n))
-  ! we need to pass the volumes for each timestep
+ call openwq_run_time_start(summa1_struc(n)) ! Passing state volumes to openWQ
 
  ! run the summa physics for one time step
  call summa_runPhysics(modelTimeStep, summa1_struc(n), err, message)
  call handle_err(err, message)
 
- ! This is where we will call the openwq_run_time_end routine
+ call openwq_run_space_step(summa1_struc(n)) ! Passing fluxes to openWQ
 
  ! write the model output
  call summa_writeOutputFiles(modelTimeStep, summa1_struc(n), err, message)
  call handle_err(err, message)
 
 !  *** OPENWQ openwq_run_time_end ***
- call openwq_run_time_end(openwq_obj, summa1_struc(n))
+ call openwq_run_time_end(summa1_struc(n))
 
 end do  ! looping through time
 

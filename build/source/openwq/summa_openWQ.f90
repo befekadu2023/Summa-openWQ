@@ -86,7 +86,6 @@ subroutine openwq_run_time_start(summa1_struc)
   implicit none
 
   ! Dummy Varialbes
-  class(CLASSWQ_openwq), intent(in)  :: openwq_obj
   type(summa1_type_dec), intent(in)  :: summa1_struc
   ! local variables
   integer(i4b)                       :: iGRU
@@ -329,32 +328,24 @@ subroutine openwq_run_time_start_go( &
 end subroutine
 
 
-subroutine openwq_run_space_step(  &
-    timeStruct,             &
-    summa1_struc,           &
-    fluxStruct,             &
-    nGRU)
-
-  USE var_lookup,   only: iLookPROG  ! named variables for state variables
-  USE var_lookup,   only: iLookTIME  ! named variables for time data structure
-  USE var_lookup,   only: iLookFLUX  ! named varaibles for flux data
-  USE var_lookup,   only: iLookATTR  ! named variables for real valued attribute data structure
-  USE var_lookup,   only: iLookINDEX 
-  USE summa_type,   only: summa1_type_dec            ! master summa data type
-  USE data_types,   only: var_dlength,var_i
-  USE globalData,   only: gru_struc
-  USE globalData,   only: data_step   ! time step of forcing data (s)
-  USE multiconst,   only:&
+subroutine openwq_run_space_step(summa1_struc)
+  USE var_lookup,only: iLookPROG  ! named variables for state variables
+  USE var_lookup,only: iLookTIME  ! named variables for time data structure
+  USE var_lookup,only: iLookFLUX  ! named varaibles for flux data
+  USE var_lookup,only: iLookATTR  ! named variables for real valued attribute data structure
+  USE var_lookup,only: iLookINDEX 
+  USE summa_type,only: summa1_type_dec            ! master summa data type
+  USE data_types,only: var_dlength,var_i
+  USE globalData,only: gru_struc
+  USE globalData,only: data_step   ! time step of forcing data (s)
+  USE multiconst,only:&
                         iden_ice,       & ! intrinsic density of ice             (kg m-3)
                         iden_water        ! intrinsic density of liquid water    (kg m-3)
 
   implicit none
 
-  type(var_i),             intent(in)    :: timeStruct 
-  type(gru_hru_doubleVec), intent(in)    :: fluxStruct
   type(summa1_type_dec),   intent(in)    :: summa1_struc
   
-  integer(i4b),            intent(in)    :: nGRU
 
   integer(i4b)                           :: hru_index ! needed because openWQ saves hrus as a single array
   integer(i4b)                           :: iHRU      ! variable needed for looping
@@ -413,6 +404,13 @@ subroutine openwq_run_space_step(  &
   real(rkind)                            :: scalarAquiferRecharge_summa_m3
   real(rkind)                            :: scalarAquiferStorage_summa_m3
   real(rkind)                            :: scalarAquiferTranspire_summa_m3
+
+  summaVars: associate(&
+      timeStruct     => summa1_struc%timeStruct             , &
+      fluxStruct     => summa1_struc%fluxStruct             , &
+      nGRU           => summa1_struc%nGRU)
+
+
 
   simtime(1) = timeStruct%var(iLookTIME%iyyy)  ! Year
   simtime(2) = timeStruct%var(iLookTIME%im)    ! month
@@ -1048,22 +1046,16 @@ subroutine openwq_run_space_step(  &
       
     end do
   end do
-
+end associate summaVars
 end subroutine openwq_run_space_step
 
 
-subroutine openwq_run_time_end( &
-  openwq_obj, &
-  summa1_struc)
-
-  USE summa_type, only:summa1_type_dec            ! master summa data type
-  
-  USE var_lookup, only: iLookTIME  ! named variables for time data structure
-
+subroutine openwq_run_time_end(summa1_struc)
+  USE summa_type, only:summa1_type_dec      ! master summa data type
+  USE var_lookup, only:iLookTIME            ! named variables for time data structure
   implicit none
 
   ! Dummy Varialbes
-  class(CLASSWQ_openwq), intent(in)  :: openwq_obj
   type(summa1_type_dec), intent(in)  :: summa1_struc
 
   ! Local Variables
