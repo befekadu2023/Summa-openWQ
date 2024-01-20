@@ -1,15 +1,15 @@
 module summa_openwq
   USE nrtype
-  USE openWQ, only:CLASSWQ_openwq
-  USE data_types, only:gru_hru_doubleVec
+  USE openWQ,only:CLASSWQ_openwq
+  USE data_types,only:gru_hru_doubleVec
   implicit none
   private
   ! Subroutines
   public :: openwq_init
   public :: openwq_run_time_start
-  public :: openwq_run_time_start_go
   public :: openwq_run_space_step
   public :: openwq_run_time_end
+  private:: openWQ_run_time_start_inner ! inner call at the HRU level
 
   ! Global Data for prognostic Variables of HRUs
   type(gru_hru_doubleVec),save,public   :: progStruct_timestep_start ! copy of progStruct at the start of timestep for passing fluxes
@@ -19,313 +19,259 @@ module summa_openwq
   contains
 
 ! Initialize the openWQ object
-subroutine openwq_init(err, message)
+subroutine openwq_init(err)
   USE globalData,only:gru_struc                               ! gru-hru mapping structures
   USE globalData,only:prog_meta
+  USE globalData,only:maxLayers,maxSnowLayers
   USE allocspace_progStuct_module,only:allocGlobal_porgStruct ! module to allocate space for global data structures
-
   implicit none
 
-  integer(i4b),intent(inout)                      :: err
-  character(*),intent(inout)                      :: message         ! error messgage
-  integer(i4b)                                    :: hruCount
-  integer(i4b)                                    :: nCanopy_2openwq
-  integer(i4b)                                    :: nSnow_2openwq
-  integer(i4b)                                    :: nSoil_2openwq
-  integer(i4b)                                    :: nRunoff_2openwq
-  integer(i4b)                                    :: nAquifer_2openwq
-  integer(i4b)                                    :: nYdirec_2openwq     ! number of layers in the y-dir (not used in summa)
-  integer(i4b)                                    :: iGRU, iHRU          ! indices of GRUs and HRUs
-  integer(i4b)                                    :: max_snow_layers     ! maximum now layers (up to 5)
+  ! Dummy Varialbes
+  integer(i4b), intent(out)                       :: err
 
-  openwq_obj = CLASSWQ_openwq() ! initalize openWQ object
+  ! local variables
+  integer(i4b)                                    :: hruCount
+  integer(i4b)                                    :: nSoil
+  ! OpenWQ dimensions
+  integer(i4b)                                    :: nCanopy_2openwq =  1    ! Canopy has only 1 layer
+  integer(i4b)                                    :: nRunoff_2openwq  = 1   ! Runoff has only 1 layer (not a summa variable - openWQ keeps track of this)
+  integer(i4b)                                    :: nAquifer_2openwq = 1   ! GW has only 1 layer
+  integer(i4b)                                    :: nYdirec_2openwq  = 1   ! number of layers in the y-dir (not used in summa)
+  ! error handling
+  character(len=256)                              :: message
 
   ! nx -> num of HRUs)
+  ! ny -> 1
+  ! nz -> num of layers (snow + soil)
+  openwq_obj = CLASSWQ_openwq() ! initalize openWQ object
+
   hruCount = sum( gru_struc(:)%hruCount )
 
-  ! ny -> this seems to be fixes because SUMMA is based on the HRU concept, so grids are serialized)
-  nYdirec_2openwq = 1
-
-  ! Openwq nz (number of layers)
-  nCanopy_2openwq = 1       ! Canopy has only 1 layer
-  nRunoff_2openwq = 1       ! Runoff has only 1 layer (not a summa variable - openWQ keeps track of this)
-  nAquifer_2openwq = 1      ! GW has only 1 layer
-  nSoil_2openwq = 0         ! Soil may have multiple layers, and gru-hrus may have different values
-  nSnow_2openwq = 0         ! Snow has multiple layers, and gru-hrus may have different values (up to 5 layers)
-  do iGRU = 1, size(gru_struc(:))
-    do iHRU = 1, gru_struc(iGRU)%hruCount
-      nSoil_2openwq = max( gru_struc(iGRU)%hruInfo(iHRU)%nSoil, nSoil_2openwq )
-      nSnow_2openwq = max( gru_struc(iGRU)%hruInfo(iHRU)%nSnow, nSnow_2openwq )
-    enddo
-  enddo
+  nSoil = maxLayers - maxSnowLayers
 
   ! intialize openWQ
   err=openwq_obj%decl(    &
     hruCount,             & ! num HRU
     nCanopy_2openwq,      & ! num layers of canopy (fixed to 1)
-    nSnow_2openwq,        & ! num layers of snow (fixed to max of 5 because it varies)
-    nSoil_2openwq,        & ! num layers of snoil (variable)
+    maxSnowLayers,        & ! num layers of snow (fixed to max of 5 because it varies)
+    nSoil,                & ! num layers of snoil (variable)
     nRunoff_2openwq,      & ! num layers of runoff (fixed to 1)
     nAquifer_2openwq,     & ! num layers of aquifer (fixed to 1)
     nYdirec_2openwq)             ! num of layers in y-dir (set to 1 because not used in summa)
 
-    max_snow_layers = 5
   
   ! Create copy of state information, needed for passing to openWQ with fluxes that require
   ! the previous time_steps volume
-  call allocGlobal_porgStruct(prog_meta,progStruct_timestep_start,max_snow_layers,err,message) 
+  call allocGlobal_porgStruct(prog_meta,progStruct_timestep_start,maxSnowLayers,err,message) 
 
 end subroutine openwq_init
   
-! Subroutine that SUMMA calls to pass varialbes that need to go to
-! openWQ - the copy of progStruct is done in here
+! Pass Summa State to openWQ
 subroutine openwq_run_time_start(summa1_struc)
   USE summa_type, only: summa1_type_dec            ! master summa data type
-  USE globalData, only: gru_struc
-
+  USE var_lookup,only: iLookINDEX 
   implicit none
 
   ! Dummy Varialbes
   type(summa1_type_dec), intent(in)  :: summa1_struc
   ! local variables
+  integer(i4b)                       :: openWQArrayIndex !index into OpenWQ's state structure
   integer(i4b)                       :: iGRU
   integer(i4b)                       :: iHRU
-  integer(i4b)                       :: nSoil_2openwq ! maximum number of layers for soil
-  integer(i4b)                       :: nSnow_2openwq ! maximum number of layers for snow)
-
-  ! Get number of soil and snow layers
-  ! Needs to be isolated because explicit-shaped arrays can only be defined with parameters 
-  ! or int passed as an argument
-  nSoil_2openwq = 0
-  nSnow_2openwq = 0
-  do iGRU = 1, size(gru_struc(:))
-    do iHRU = 1, gru_struc(iGRU)%hruCount
-      nSnow_2openwq = max( gru_struc(iGRU)%hruInfo(iHRU)%nSnow, nSnow_2openwq )
-      nSoil_2openwq = max( gru_struc(iGRU)%hruInfo(iHRU)%nSoil, nSoil_2openwq )
-    enddo
-  enddo
-
-  call openwq_run_time_start_go( &
-    openwq_obj,           &
-    summa1_struc,         &
-    nSnow_2openwq,        &
-    nSoil_2openwq)
-
-end subroutine
-
-subroutine openwq_run_time_start_go( &
-    openwq_obj,               &
-    summa1_struc,             &
-    nSnow_2openwq,            &
-    nSoil_2openwq)
-
-  USE summa_type, only: summa1_type_dec            ! master summa data type
-  USE globalData, only: gru_struc
-  USE var_lookup, only: iLookPROG  ! named variables for state variables
-  USE var_lookup, only: iLookTIME  ! named variables for time data structure
-  USE var_lookup, only: iLookATTR  ! named variables for real valued attribute data structure
-  USE var_lookup, only: iLookVarType  ! named variables for real valued attribute data structure
-
-  USE multiconst,only:&
-                        iden_ice,       & ! intrinsic density of ice             (kg m-3)
-                        iden_water        ! intrinsic density of liquid water    (kg m-3)
-  USE globalData,only:prog_meta
-
-  implicit none
-
-  ! Dummy Varialbes
-  class(CLASSWQ_openwq), intent(in)   :: openwq_obj
-  type(summa1_type_dec), intent(in)   :: summa1_struc
-  ! local variables
-  integer(i4b), intent(in)            :: nSnow_2openwq
-  integer(i4b), intent(in)            :: nSoil_2openwq
-  integer(i4b)                        :: iGRU
-  integer(i4b)                        :: iHRU
-  integer(i4b)                        :: ilay
-  integer(i4b)                        :: iVar
-  integer(i4b)                        :: iDat
-  integer(i4b)                        :: openWQArrayIndex
-  integer(i4b)                        :: simtime(5) ! 5 time values yy-mm-dd-hh-min
-  real(rkind)                         :: airTemp_depVar_summa_K
-  real(rkind)                         :: canopyWatVol_stateVar_summa_m3
-  real(rkind)                         :: aquiferWatVol_stateVar_summa_m3
-  real(rkind)                         :: sweWatVol_stateVar_summa_m3(nSnow_2openwq)
-  real(rkind)                         :: soilWatVol_stateVar_summa_m3(nSoil_2openwq)
-  real(rkind)                         :: soilTemp_depVar_summa_K(nSoil_2openwq)
-  real(rkind)                         :: soilMoist_depVar_summa_frac(nSoil_2openwq)
-  integer(i4b)                        :: soil_start_index ! starting value of the soil in the mLayerVolFracWat(:) array
-  integer(i4b)                        :: err
-  real(rkind),parameter               :: valueMissing=-9999._rkind   ! seems to be SUMMA's default value for missing data
-  logical(1)                          :: last_hru_flag
-  integer(i4b)                        :: index
-  integer(i4b)                        :: offset
-  integer(i4b)                        :: nSnow
-
+  integer(i4b)                       :: nHRU        ! number of HRUs in the GRU (used in looping)
+  integer(i4b)                       :: nSoil
+  integer(i4b)                       :: nSnow
+  logical(1)                         :: lastHRUFlag
   summaVars: associate(&
       progStruct     => summa1_struc%progStruct             , &
       timeStruct     => summa1_struc%timeStruct             , &
-      attrStruct     => summa1_struc%attrStruct               &
+      attrStruct     => summa1_struc%attrStruct             , &
+      indxStruct     => summa1_struc%indxStruct             , & 
+      nGRU           => summa1_struc%nGRU                     &
   )
+  ! ############################
 
-  last_hru_flag = .false.
-  ! Update dependencies and storage volumes
-  ! Assemble the data to send to openWQ
+  openWQArrayIndex = 0
+  lastHRUFlag = .false.
 
-  openWQArrayIndex = 0 ! index into the arrays that are being passed to openWQ
+  do iGRU=1,nGRU
+    nHRU = size(progStruct%gru(iGRU)%hru(:))
+    do iHRU=1,nHRU
+      if (iGRU == nGRU .and. iHRU == nHRU )then
+        lastHRUFlag = .true.
+      end if
 
-  do iGRU = 1, size(gru_struc(:))
-      do iHRU = 1, gru_struc(iGRU)%hruCount
+      nSnow = indxStruct%gru(iGRU)%hru(iHRU)%var(iLookINDEX%nSnow)%dat(1)
+      nSoil = indxStruct%gru(iGRU)%hru(iHRU)%var(iLookINDEX%nSoil)%dat(1)
+      
+      call openwq_run_time_start_inner(openWQArrayIndex, iGRU, iHRU, &
+                                       summa1_struc,&
+                                       nSnow, nSoil, lastHRUFlag)
+      
+      openWQArrayIndex = openWQArrayIndex + 1 
 
-        nSnow = gru_struc(iGRU)%hruInfo(iHRU)%nSnow
-
-        if (iGRU == size(gru_struc(:)) .and. iHRU == gru_struc(iGRU)%hruCount)then
-          last_hru_flag = .true.
-        end if
-
-        GeneralVars: associate(&
-          hru_area_m2                 => attrStruct%gru(iGRU)%hru(iHRU)%var(iLookATTR%HRUarea)                      ,&
-          Tair_summa_K                => progStruct%gru(iGRU)%hru(iHRU)%var(iLookPROG%scalarCanairTemp)%dat(1)      ,&
-          scalarCanopyWat_summa_kg_m2 => progStruct%gru(iGRU)%hru(iHRU)%var(iLookPROG%scalarCanopyWat)%dat(1)       ,&
-          AquiferStorWat_summa_m      => progStruct%gru(iGRU)%hru(iHRU)%var(iLookPROG%scalarAquiferStorage)%dat(1)  &
-        )
-
-
-        ! ############################
-        ! Update unlayered variables and dependencies 
-        ! (1 layer only)
-        ! ############################
-
-        ! Tair 
-        ! (Summa in K)
-        if(Tair_summa_K /= valueMissing) then
-          airTemp_depVar_summa_K =  Tair_summa_K 
-        endif
-          
-        ! Vegetation
-        ! unit for volume = m3 (summa-to-openwq unit conversions needed)
-        ! scalarCanopyWat [kg m-2], so needs to  to multiply by hru area [m2] and divide by water density
-        if(scalarCanopyWat_summa_kg_m2 /= valueMissing) then
-          canopyWatVol_stateVar_summa_m3 = scalarCanopyWat_summa_kg_m2 * hru_area_m2 / iden_water
-        endif
-
-        ! Aquifer
-        ! unit for volume = m3 (summa-to-openwq unit conversions needed)
-        ! scalarAquiferStorage [m], so needs to  to multiply by hru area [m2] only
-        if(AquiferStorWat_summa_m /= valueMissing) then
-          aquiferWatVol_stateVar_summa_m3 = AquiferStorWat_summa_m * hru_area_m2
-        endif 
-        
-        ! ############################
-        ! Update layered variables and dependenecies
-        ! ############################
-
-
-        ! Snow
-        if (nSnow_2openwq .gt. 0)then
-          do ilay = 1, nSnow_2openwq
-            SnowVars: associate(&
-              mLayerDepth_summa_m         => progStruct%gru(iGRU)%hru(iHRU)%var(iLookPROG%mLayerDepth)%dat(ilay)         ,&    ! depth of each layer (m)
-              mLayerVolFracWat_summa_frac => progStruct%gru(iGRU)%hru(iHRU)%var(iLookPROG%mLayerVolFracWat)%dat(ilay)     &    ! volumetric fraction of total water in each layer  (-)
-            )
-            ! Snow
-            ! unit for volume = m3 (summa-to-openwq unit conversions needed)
-            ! mLayerVolFracIce and mLayerVolFracLiq [-], so needs to  to multiply by hru area [m2] and divide by water density
-            ! But needs to account for both ice and liquid, and convert to liquid volumes
-            if(mLayerVolFracWat_summa_frac /= valueMissing) then
-              sweWatVol_stateVar_summa_m3(ilay) =                             &
-                mLayerVolFracWat_summa_frac  * mLayerDepth_summa_m * hru_area_m2
-            else
-              sweWatVol_stateVar_summa_m3(ilay) = 0._rkind
-            endif
-
-            end associate SnowVars
-          enddo
-        end if
-
-        if (nSnow_2openwq == 0)then
-          soil_start_index = 1
-        else
-          soil_start_index = nSnow_2openwq
-        end if
-
-        ! print *, iGRU,iHRU,size(progStruct%gru(iGRU)%hru(iHRU)%var(iLookPROG%mLayerVolFracWat)%dat(:))
-        ! if (size(progStruct%gru(iGRU)%hru(iHRU)%var(iLookPROG%mLayerVolFracWat)%dat(:)) .ne. nSnow_2openwq+nSoil_2openwq) then
-        !   print *, progStruct%gru(iGRU)%hru(iHRU)%var(iLookPROG%mLayerVolFracWat)%dat(:),"nsnow = ",gru_struc(iGRU)%hruInfo(iHRU)%nSnow
-        ! end if
-        ! Soil - needs to start after the snow
-        do ilay = soil_start_index, nSoil_2openwq
-          ! print *, ilay+nSnow_2openwq
-          SoilVars: associate(&
-            mLayerDepth_summa_m         => progStruct%gru(iGRU)%hru(iHRU)%var(iLookPROG%mLayerDepth)%dat(ilay)       ,&    ! depth of each layer (m)
-            Tsoil_summa_K               => progStruct%gru(iGRU)%hru(iHRU)%var(iLookPROG%mLayerTemp)%dat(ilay)        ,&
-            mLayerVolFracWat_summa_frac => progStruct%gru(iGRU)%hru(iHRU)%var(iLookPROG%mLayerVolFracWat)%dat(ilay+nSnow)   &
-          )
-          ! Tsoil
-          ! (Summa in K)
-          if(Tsoil_summa_K /= valueMissing) then
-            soilTemp_depVar_summa_K(ilay) = Tsoil_summa_K
-          endif
-
-          soilMoist_depVar_summa_frac(ilay) = 0     ! TODO: Find the value for this varaibles
-          ! Soil
-          ! unit for volume = m3 (summa-to-openwq unit conversions needed)
-          ! mLayerMatricHead [m], so needs to  to multiply by hru area [m2]
-          if(mLayerVolFracWat_summa_frac /= valueMissing) then
-            soilWatVol_stateVar_summa_m3(ilay) = mLayerVolFracWat_summa_frac * hru_area_m2 * mLayerDepth_summa_m
-          endif
-
-          end associate SoilVars
-
-        enddo
-
-        ! Copy the prog structure
-        do iVar = 1, size(progStruct%gru(iGRU)%hru(iHRU)%var)
-          do iDat = 1, size(progStruct%gru(iGRU)%hru(iHRU)%var(iVar)%dat)
-            select case(prog_meta(iVar)%vartype)
-              case(iLookVarType%ifcSoil);
-                offset = 0
-              case(iLookVarType%ifcToto);
-                offset = 0
-              case default
-                offset = 1
-            end select         
-            do index = offset , size(progStruct%gru(iGRU)%hru(iHRU)%var(iVar)%dat) - 1 + offset
-              progStruct_timestep_start%gru(iGRU)%hru(iHRU)%var(iVar)%dat(index) = progStruct%gru(iGRU)%hru(iHRU)%var(iVar)%dat(index)
-            enddo
-          end do
-        end do
-
-        
-          ! add the time values to the array
-        simtime(1) = timeStruct%var(iLookTIME%iyyy)  ! Year
-        simtime(2) = timeStruct%var(iLookTIME%im)    ! month
-        simtime(3) = timeStruct%var(iLookTIME%id)    ! hour
-        simtime(4) = timeStruct%var(iLookTIME%ih)    ! day
-        simtime(5) = timeStruct%var(iLookTIME%imin)  ! minute
-        
-        err=openwq_obj%openwq_run_time_start(&
-              last_hru_flag,                          & 
-              openWQArrayIndex,                       & ! total HRUs
-              nSnow_2openwq,                          &
-              nSoil_2openwq,                          &
-              simtime,                                &
-              soilMoist_depVar_summa_frac,            &                    
-              soilTemp_depVar_summa_K,                &
-              airTemp_depVar_summa_K,                 &
-              sweWatVol_stateVar_summa_m3,            &
-              canopyWatVol_stateVar_summa_m3,         &
-              soilWatVol_stateVar_summa_m3,           &
-              aquiferWatVol_stateVar_summa_m3)
-        
-        openWQArrayIndex = openWQArrayIndex + 1 
-        end associate GeneralVars
-
-      end do ! end HRU
+    end do ! end HRU
   end do ! end GRU
 
   end associate summaVars
-
 end subroutine
+
+
+subroutine openWQ_run_time_start_inner(openWQArrayIndex, iGRU, iHRU, &
+                                      summa1_struc, nSnow, nSoil, last_hru_flag)
+  USE summa_type,only: summa1_type_dec            ! master summa data type
+  USE var_lookup,only: iLookPROG  ! named variables for state variables
+  USE var_lookup,only: iLookATTR  ! named variables for real valued attribute data structure
+  USE var_lookup,only: iLookINDEX 
+  USE var_lookup,only: iLookVarType  ! named variables for real valued attribute data structure
+  USE var_lookup,only: iLookTIME  ! named variables for time data structure
+  USE globalData,only:prog_meta
+  USE globalData,only:realMissing
+  USE multiconst,only:iden_water        ! intrinsic density of liquid water    (kg m-3)
+  implicit none
+  integer(i4b), intent(in)           :: openWQArrayIndex !index into OpenWQ's state structure
+  integer(i4b), intent(in)           :: iGRU
+  integer(i4b), intent(in)           :: iHRU
+  type(summa1_type_dec), intent(in)  :: summa1_struc
+  integer(i4b), intent(in)           :: nSnow
+  integer(i4b), intent(in)           :: nSoil
+  logical(1),intent(in)              :: last_hru_flag
+
+  ! local variables
+  integer(i4b)                       :: simtime(5) ! 5 time values yy-mm-dd-hh-min
+  real(rkind)                        :: canopyWatVol_stateVar_summa_m3     ! OpenWQ State Var
+  real(rkind)                        :: sweWatVol_stateVar_summa_m3(nSnow) ! OpenWQ State Var
+  real(rkind)                        :: soilTemp_depVar_summa_K(nSoil)     ! OpenWQ State Var
+  real(rkind)                        :: soilWatVol_stateVar_summa_m3(nSoil)! OpenWQ State Var
+  real(rkind)                        :: soilMoist_depVar_summa_frac(nSoil) ! OpenWQ State Var
+  real(rkind)                        :: aquiferWatVol_stateVar_summa_m3    ! OpenWQ State Var
+  ! counter variables
+  integer(i4b)                       :: ilay
+  integer(i4b)                       :: iVar
+  integer(i4b)                       :: iDat
+  integer(i4b)                       :: index
+  integer(i4b)                       :: offset
+  ! error handling
+  integer(i4b)                       :: err
+
+  summaVars: associate(&
+    progStruct                  => summa1_struc%progStruct             , &
+    timeStruct                  => summa1_struc%timeStruct             , &
+    hru_area_m2                 => summa1_struc%attrStruct%gru(iGRU)%hru(iHRU)%var(iLookATTR%HRUarea)                     ,&
+    Tair_summa_K                => summa1_struc%progStruct%gru(iGRU)%hru(iHRU)%var(iLookPROG%scalarCanairTemp)%dat(1)     ,& ! air temperature (K)
+    scalarCanopyWat_summa_kg_m2 => summa1_struc%progStruct%gru(iGRU)%hru(iHRU)%var(iLookPROG%scalarCanopyWat)%dat(1)      ,& ! canopy water (kg m-2)
+    mLayerDepth_summa_m         => summa1_struc%progStruct%gru(iGRU)%hru(iHRU)%var(iLookPROG%mLayerDepth)%dat(:)          ,& ! depth of each layer (m)
+    mLayerVolFracWat_summa_frac => summa1_struc%progStruct%gru(iGRU)%hru(iHRU)%var(iLookPROG%mLayerVolFracWat)%dat(:)     ,& ! volumetric fraction of total water in each layer  (-)
+    Tsoil_summa_K               => summa1_struc%progStruct%gru(iGRU)%hru(iHRU)%var(iLookPROG%mLayerTemp)%dat(:)           ,& ! soil temperature (K) for each layer
+    AquiferStorWat_summa_m      => summa1_struc%progStruct%gru(iGRU)%hru(iHRU)%var(iLookPROG%scalarAquiferStorage)%dat(1) & ! aquifer storage (m)
+  )
+
+  ! ############################
+  ! Update unlayered variables and dependencies (1 layer only)
+  ! ############################
+
+  if(Tair_summa_K == realMissing) then
+    stop 'Error: OpenWQ requires air temperature (K)'
+  endif
+  
+  ! Vegetation
+  ! unit for volume = m3 (summa-to-openwq unit conversions needed)
+  ! scalarCanopyWat [kg m-2], so needs to  to multiply by hru area [m2] and divide by water density
+  if(scalarCanopyWat_summa_kg_m2 == realMissing) then
+    canopyWatVol_stateVar_summa_m3 = 0._rkind
+  else
+    canopyWatVol_stateVar_summa_m3 = scalarCanopyWat_summa_kg_m2 * hru_area_m2 / iden_water
+  endif
+
+  ! Aquifer
+  ! unit for volume = m3 (summa-to-openwq unit conversions needed)
+  ! scalarAquiferStorage [m], so needs to  to multiply by hru area [m2] only
+  if(AquiferStorWat_summa_m == realMissing) then
+    stop 'Error: OpenWQ requires aquifer storage (m3)'
+  endif 
+  aquiferWatVol_stateVar_summa_m3 = AquiferStorWat_summa_m * hru_area_m2
+        
+  ! ############################
+  ! Update layered variables and dependenecies
+  ! ############################
+
+  if (nSnow .gt. 0)then
+    do ilay = 1, nSnow
+      ! Snow
+      ! unit for volume = m3 (summa-to-openwq unit conversions needed)
+      ! mLayerVolFracIce and mLayerVolFracLiq [-], so needs to  to multiply by hru area [m2] and divide by water density
+      ! But needs to account for both ice and liquid, and convert to liquid volumes
+      if(mLayerVolFracWat_summa_frac(ilay) /= realMissing) then
+        sweWatVol_stateVar_summa_m3(ilay) =                             &
+          mLayerVolFracWat_summa_frac(ilay)  * mLayerDepth_summa_m(ilay) * hru_area_m2
+      else
+        sweWatVol_stateVar_summa_m3(ilay) = 0._rkind
+      endif
+    enddo ! end snow layers
+  endif ! end snow
+
+
+  do ilay = 1, nSoil
+    ! Soil
+    ! Tsoil
+    ! (Summa in K)
+    if(Tsoil_summa_K(nSnow+ilay) == realMissing) then
+      stop 'Error: OpenWQ requires soil temperature (K)'
+    endif
+    soilTemp_depVar_summa_K(ilay) = Tsoil_summa_K(nSnow+ilay)
+    
+    soilMoist_depVar_summa_frac(ilay) = 0     ! TODO: Find the value for this varaibles
+    ! Soil
+    ! unit for volume = m3 (summa-to-openwq unit conversions needed)
+    ! mLayerMatricHead [m], so needs to  to multiply by hru area [m2]
+    if(mLayerVolFracWat_summa_frac(nSnow+ilay) == realMissing) then
+      stop 'Error: OpenWQ requires soil water (m3)'
+    endif
+    soilWatVol_stateVar_summa_m3(ilay) =                & 
+        mLayerVolFracWat_summa_frac(nSnow+ilay) * hru_area_m2 * mLayerDepth_summa_m(nSnow+ilay)
+  enddo
+
+
+  ! Copy the prog structure
+  do iVar = 1, size(progStruct%gru(iGRU)%hru(iHRU)%var)
+    do iDat = 1, size(progStruct%gru(iGRU)%hru(iHRU)%var(iVar)%dat)
+      select case(prog_meta(iVar)%vartype)
+        case(iLookVarType%ifcSoil);
+          offset = 0
+        case(iLookVarType%ifcToto);
+          offset = 0
+        case default
+          offset = 1
+      end select         
+      do index = offset , size(progStruct%gru(iGRU)%hru(iHRU)%var(iVar)%dat) - 1 + offset
+        progStruct_timestep_start%gru(iGRU)%hru(iHRU)%var(iVar)%dat(index) = progStruct%gru(iGRU)%hru(iHRU)%var(iVar)%dat(index)
+      enddo
+    end do
+  end do
+
+        
+  simtime(1) = timeStruct%var(iLookTIME%iyyy)  ! Year
+  simtime(2) = timeStruct%var(iLookTIME%im)    ! month
+  simtime(3) = timeStruct%var(iLookTIME%id)    ! hour
+  simtime(4) = timeStruct%var(iLookTIME%ih)    ! day
+  simtime(5) = timeStruct%var(iLookTIME%imin)  ! minute
+        
+  err=openwq_obj%openwq_run_time_start(&
+                                       last_hru_flag,                   & 
+                                       openWQArrayIndex,                & ! total HRUs
+                                       nSnow,                           &
+                                       nSoil,                           &
+                                       simtime,                         &
+                                       soilMoist_depVar_summa_frac,     &                    
+                                       soilTemp_depVar_summa_K,         &
+                                       Tair_summa_K,                    & ! air temperature (K)
+                                       sweWatVol_stateVar_summa_m3,     &
+                                       canopyWatVol_stateVar_summa_m3,  &
+                                       soilWatVol_stateVar_summa_m3,    &
+                                       aquiferWatVol_stateVar_summa_m3)
+  end associate summaVars
+
+end subroutine openWQ_run_time_start_inner
 
 
 subroutine openwq_run_space_step(summa1_struc)
@@ -338,6 +284,7 @@ subroutine openwq_run_space_step(summa1_struc)
   USE data_types,only: var_dlength,var_i
   USE globalData,only: gru_struc
   USE globalData,only: data_step   ! time step of forcing data (s)
+  USE globalData,only: realMissing
   USE multiconst,only:&
                         iden_ice,       & ! intrinsic density of ice             (kg m-3)
                         iden_water        ! intrinsic density of liquid water    (kg m-3)
@@ -354,7 +301,6 @@ subroutine openwq_run_space_step(summa1_struc)
 
   integer(i4b)                           :: simtime(5) ! 5 time values yy-mm-dd-hh-min
   integer(i4b)                           :: err
-  real(rkind),parameter                  :: valueMissing=-9999._rkind   ! seems to be SUMMA's default value for missing data
 
   ! compartment indexes in OpenWQ (defined in the hydrolink)
   integer(i4b)                           :: canopy_index_openwq    = 0
@@ -548,7 +494,7 @@ subroutine openwq_run_space_step(summa1_struc)
       ! %%%%%%%%%%%%%%%%%%%%%%%%%%%
       ! --------------------------------------------------------------------
 
-      if(scalarCanopyWat_summa_kg_m2 /= valueMissing) then
+      if(scalarCanopyWat_summa_kg_m2 /= realMissing) then
         
         ! ====================================================
         ! 1.1 precipitation -> canopy 

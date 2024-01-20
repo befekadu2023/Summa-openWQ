@@ -136,7 +136,6 @@ int CLASSWQ_openwq::openwq_run_time_start(
     
     // Updating Chemistry dependencies and volumes (out of order because of looping)
 
-    // Air Temp is only one layer - NEED TO DOUBLE CHECK
     OpenWQ_hostModelconfig_ref->set_dependVar_at(1,index_hru,0,0, airTemp_depVar_summa_K);
     OpenWQ_hostModelconfig_ref->set_waterVol_hydromodel_at(canopy_index_openwq,index_hru,0,0, canopyWatVol_stateVar_summa_m3);   // canopy
     OpenWQ_hostModelconfig_ref->set_waterVol_hydromodel_at(runoff_index_openwq,index_hru,0,0, runoff_vol);                       // runoff

@@ -89,7 +89,7 @@ call summa_readRestart(summa1_struc(n), err, message)
 call handle_err(err, message)
 
 ! Init openWQ object
-call openwq_init(err, message)
+call openwq_init(err)
 if(err/=0) call stop_program(1, 'problem allocating openWQ progStruct for saving state information')
 
 
