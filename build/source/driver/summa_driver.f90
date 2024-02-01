@@ -116,7 +116,7 @@ do modelTimeStep=1,numtim
  call summa_writeOutputFiles(modelTimeStep, summa1_struc(n), err, message)
  call handle_err(err, message)
 
-!  *** OPENWQ openwq_run_time_end ***
+ !  *** OPENWQ openwq_run_time_end ***
  call openwq_run_time_end(summa1_struc(n))
 
 end do  ! looping through time

@@ -481,7 +481,7 @@ subroutine openwq_run_space_step(summa1_struc)
       scalarAquiferTranspire_summa_m3 = scalarAquiferTranspire_summa_m_s  * hru_area_m2 * data_step
       
       ! Reset Runoff (it's not tracked by SUMMA, so need to track it here)
-      !scalarRunoffVol_m3 = 0._rkind
+      scalarRunoffVol_m3 = 0._rkind
 
       ! ####################################################################
       ! Apply Fluxes
@@ -492,8 +492,7 @@ subroutine openwq_run_space_step(summa1_struc)
       ! %%%%%%%%%%%%%%%%%%%%%%%%%%%
       ! 1 Fluxes involving the canopy
       ! %%%%%%%%%%%%%%%%%%%%%%%%%%%
-      ! --------------------------------------------------------------------
-
+      ! --------------------------------------------------------------------      
       if(scalarCanopyWat_summa_kg_m2 /= realMissing) then
         
         ! ====================================================
@@ -508,11 +507,11 @@ subroutine openwq_run_space_step(summa1_struc)
         wflux_s2r = (scalarRainfall_summa_m3 - scalarThroughfallRain_summa_m3) &
                     + (scalarSnowfall_summa_m3 - scalarThroughfallSnow_summa_m3)
         ! *Call openwq_run_space_in* if wflux_s2r not 0
-        err=openwq_obj%openwq_run_space_in(                    &
-          simtime,                                      &
-          'PRECIP',                                     &
-          OpenWQindex_r, hru_index, iy_r, iz_r,   &
-          wflux_s2r)
+        err=openwq_obj%openwq_run_space_in(                                   &
+                                      simtime,                                &
+                                      'PRECIP',                               &
+                                      OpenWQindex_r, hru_index, iy_r, iz_r,   &
+                                      wflux_s2r)
 
         ! ====================================================
         ! 1.2 canopy -> upper snow layer or runoff pool
@@ -537,12 +536,12 @@ subroutine openwq_run_space_step(summa1_struc)
           scalarRunoffVol_m3 = scalarRunoffVol_m3 + wflux_s2r;
         end if
         ! *Call openwq_run_space* if wflux_s2r not 0
-        err=openwq_obj%openwq_run_space(                       &
-          simtime,                                      &
-          OpenWQindex_s, hru_index, iy_s, iz_s,         &
-          OpenWQindex_r, hru_index, iy_r, iz_r,         &
-          wflux_s2r,  &
-          wmass_source)
+        err=openwq_obj%openwq_run_space(                                      &
+                                    simtime,                                  &
+                                    OpenWQindex_s, hru_index, iy_s, iz_s,     &
+                                    OpenWQindex_r, hru_index, iy_r, iz_r,     &
+                                    wflux_s2r,  &
+                                    wmass_source)
         
         ! ====================================================
         ! 1.3 canopy -> OUT (lost from model) (Evap + Subl)
@@ -560,13 +559,14 @@ subroutine openwq_run_space_step(summa1_struc)
         ! transpiration + evaporation + sublimation
         wflux_s2r =  scalarCanopyEvaporation_summa_m3  &
                       + scalarCanopySublimation_summa_m3
+        
         ! *Call openwq_run_space* if wflux_s2r not 0
-        err=openwq_obj%openwq_run_space(                       &
-          simtime,                                      &
-          OpenWQindex_s, hru_index, iy_s, iz_s,         &
-          OpenWQindex_r, hru_index, iy_r, iz_r,         &
-          wflux_s2r,  &
-          wmass_source)
+        err=openwq_obj%openwq_run_space(                                       &
+                                      simtime,                                 &
+                                      OpenWQindex_s, hru_index, iy_s, iz_s,    &
+                                      OpenWQindex_r, hru_index, iy_r, iz_r,    &
+                                      wflux_s2r,  &
+                                      wmass_source)
 
       endif
 
@@ -598,12 +598,12 @@ subroutine openwq_run_space_step(summa1_struc)
         scalarRunoffVol_m3 = scalarRunoffVol_m3 + wflux_s2r ! Needed because runoff volume is not tracked
       end if
       ! *Call openwq_run_space* if wflux_s2r not 0
-      err=openwq_obj%openwq_run_space_in(                &
-        simtime,                                  &
-        'PRECIP',                                 &
-        OpenWQindex_r, hru_index, iy_r, iz_r,     &
-        wflux_s2r                                 &
-        )
+      err=openwq_obj%openwq_run_space_in(                                     &
+                                    simtime,                                  &
+                                    'PRECIP',                                 &
+                                    OpenWQindex_r, hru_index, iy_r, iz_r,     &
+                                    wflux_s2r                                 &
+                                    )
 
       ! Below fluxes only occur when there is no snow
       if (current_nSnow .gt. 0)then
