@@ -343,7 +343,8 @@ subroutine openwq_run_space_step(  &
   USE var_lookup,   only: iLookTIME  ! named variables for time data structure
   USE var_lookup,   only: iLookFLUX  ! named varaibles for flux data
   USE var_lookup,   only: iLookATTR  ! named variables for real valued attribute data structure
-  USE var_lookup,   only: iLookINDEX 
+  USE var_lookup,   only: iLookINDEX
+  USE var_lookup,   only: iLookTYPE          ! look-up values for classification of veg, soils etc. 
   USE summa_type,   only: summa1_type_dec            ! master summa data type
   USE globalData,   only: openwq_obj
   USE data_types,   only: var_dlength,var_i
@@ -352,6 +353,7 @@ subroutine openwq_run_space_step(  &
   USE multiconst,   only:&
                         iden_ice,       & ! intrinsic density of ice             (kg m-3)
                         iden_water        ! intrinsic density of liquid water    (kg m-3)
+  USE module_sf_noahmplsm,only:isWater       ! Identifier for water land cover type
 
   implicit none
 
@@ -435,6 +437,7 @@ subroutine openwq_run_space_step(  &
   do iGRU=1,nGRU
     do iHRU=1,gru_struc(iGRU)%hruCount
       hru_index = hru_index + 1
+      if (summa1_struc%typeStruct%gru(iGRU)%hru(iHRU)%var(iLookTYPE%vegTypeIndex) == isWater) return                                      !To avoid chemical calculations of the hrus for which summa is not doing flux calculations but pass -9999 as flux values. i.e., for water pixels.
 
       ! ####################################################################
       ! Associate relevant variables
@@ -542,7 +545,7 @@ subroutine openwq_run_space_step(  &
       scalarAquiferTranspire_summa_m3 = scalarAquiferTranspire_summa_m_s  * hru_area_m2 * data_step
       
       ! Reset Runoff (it's not tracked by SUMMA, so need to track it here)
-      !scalarRunoffVol_m3 = 0._rkind
+      scalarRunoffVol_m3 = 0._rkind                                                                   !initialization of this variable is required to limit the runoff aggreggation to each hru.
 
       ! ####################################################################
       ! Apply Fluxes
@@ -701,7 +704,7 @@ subroutine openwq_run_space_step(  &
           ! snow(iLayer)
           OpenWQindex_s = snow_index_openwq
           iz_s          = iLayer
-          mLayerVolFracWat_summa_m3 = mLayerVolFracWat_summa_frac(iLayer+nSnow) * hru_area_m2 * mLayerDepth_summa_m(iLayer+nSnow)
+          mLayerVolFracWat_summa_m3 = mLayerVolFracWat_summa_frac(iLayer) * hru_area_m2 * mLayerDepth_summa_m(iLayer)
           wmass_source              = mLayerVolFracWat_summa_m3
           ! *Recipient*: 
           ! snow(iLayer+1)
@@ -894,7 +897,8 @@ subroutine openwq_run_space_step(  &
         ! *Source*:  
         ! each soil layer
         OpenWQindex_s = soil_index_openwq
-        iz_s          = nSnow + iLayer
+        !iz_s          = nSnow + iLayer
+        iz_s          = iLayer
         mLayerVolFracWat_summa_m3 = mLayerVolFracWat_summa_frac(iLayer+nSnow) * hru_area_m2 * mLayerDepth_summa_m(iLayer+nSnow)
         wmass_source              = mLayerVolFracWat_summa_m3
         ! *Recipient*: 
