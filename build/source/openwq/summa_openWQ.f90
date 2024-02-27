@@ -437,7 +437,7 @@ subroutine openwq_run_space_step(  &
   do iGRU=1,nGRU
     do iHRU=1,gru_struc(iGRU)%hruCount
       hru_index = hru_index + 1
-      if (summa1_struc%typeStruct%gru(iGRU)%hru(iHRU)%var(iLookTYPE%vegTypeIndex) == isWater) return                                      !To avoid chemical calculations of the hrus for which summa is not doing flux calculations but pass -9999 as flux values. i.e., for water pixels.
+      if (summa1_struc%typeStruct%gru(iGRU)%hru(iHRU)%var(iLookTYPE%vegTypeIndex) == isWater) cycle                                      !To avoid chemical calculations of the hrus for which summa is not doing flux calculations but pass -9999 as flux values. i.e., for water pixels.
 
       ! ####################################################################
       ! Associate relevant variables
